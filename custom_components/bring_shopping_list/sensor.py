@@ -6,12 +6,9 @@ import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from datetime import datetime
 from homeassistant.components.sensor import PLATFORM_SCHEMA
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SSL
+from homeassistant.const import CONF_NAME
 from homeassistant.helpers.entity import Entity
-from requests import get
-
-
-#import pprint
+import aiohttp
 
 __version__ = '0.0.1'
 
@@ -25,18 +22,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
-
-    # vol.Optional(CONF_SSL, default=False): cv.boolean,
-    # vol.Optional(CONF_SSL_CERT, default=False): cv.boolean,
-    # vol.Required(CONF_TOKEN): cv.string,
-    # vol.Optional(CONF_MAX, default=5): cv.string,
-    # vol.Optional(CONF_SERVER): cv.string,
-    # vol.Optional(CONF_DL_IMAGES, default=True): cv.boolean,
-    # vol.Optional(CONF_HOST, default='localhost'): cv.string,
-    # vol.Optional(CONF_PORT, default=32400): cv.port,
     vol.Required(CONF_LISTS): vol.All(cv.ensure_list, [cv.string]),
     vol.Optional(CONF_LOCALE, default='en-US'): cv.string,
-    # vol.Optional(CONF_IMG_CACHE, default='/custom-lovelace/upcoming-media-card/images/plex/'): cv.string
+    vol.Optional(CONF_NAME): cv.string,
 })
 
 
@@ -128,7 +116,7 @@ class BringSensor(Entity):
 
         return items
 
-    def update(self):
+    async def async_update(self):
         self._items = []
         self._recently = []
         """Fetch new state data for the sensor.
@@ -136,13 +124,13 @@ class BringSensor(Entity):
         """
         # get articles US
         url = f"https://web.getbring.com/locale/articles.{self._locale}.json"
-        articles = get(url=url).json()
+        articles = await self.get(url)
 
         url = f"https://api.getbring.com/rest/bringlists/{self._listId}/details"
-        details = get(url=url).json()
+        details = await self.get(url)
 
         url = f'https://api.getbring.com/rest/bringlists/{self._listId}'
-        data = get(url=url).json()
+        data = await self.get(url)
 
         purchase = data["purchase"]
         recently = data["recently"]
@@ -160,3 +148,8 @@ class BringSensor(Entity):
             .replace("ö", "oe")\
             .replace("ü", "ue")\
             .replace(" ", "_")
+
+    async def get(self, url):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                return await resp.json()
